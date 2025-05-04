@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useCallback, useState, useRef } from 'react'
-import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX, Plus, ArrowUp } from 'lucide-react'
+import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX, Plus, ArrowUp, Paperclip, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import TextareaAutosize from 'react-textarea-autosize'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,6 +16,7 @@ import type { Message, CreateMessage } from 'ai/react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import ReactMarkdown, { Components } from 'react-markdown'
 import removeMarkdown from 'remove-markdown'
+import Image from 'next/image'
 
 interface AvailableModel {
   id: string;
@@ -29,7 +30,20 @@ interface AIChatProps {
   isLoading: boolean;
   clearMessages: () => void;
   setInput?: (value: string | ((prevInput: string) => string)) => void;
-  append?: (message: CreateMessage, options?: { body?: Record<string, any> }) => Promise<string | null | undefined>;
+  append?: (
+    message: Message | CreateMessage,
+    options?: {
+      data?: Record<string, string>;
+      experimental_attachments?: FileList | undefined;
+    },
+  ) => Promise<string | null | undefined>;
+  handleSubmit?: (
+    e: React.FormEvent<HTMLFormElement>,
+    options?: {
+      data?: Record<string, string>;
+      experimental_attachments?: FileList | undefined;
+    },
+  ) => void;
   isDarkMode?: boolean;
 }
 
@@ -373,11 +387,14 @@ export function AIChat({
   clearMessages,
   setInput,
   append,
+  handleSubmit,
   isDarkMode = false,
 }: AIChatProps) {
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const virtuosoRef = useRef<VirtuosoHandle>(null); // Virtuoso の Ref を作成
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 音声認識関連の状態
   const [isListening, setIsListening] = useState<boolean>(false);
@@ -414,9 +431,27 @@ export function AIChat({
   }, [messages]);
   
   // 送信関数を事前に定義
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, attachments?: FileList) => {
+    if (handleSubmit && attachments && attachments.length > 0) {
+        console.log(`モデル '${selectedModel}' を使用してメッセージと添付ファイルを送信します (handleSubmit)。`);
+        const dummyEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
+        handleSubmit(dummyEvent, {
+            experimental_attachments: attachments,
+            data: { model: selectedModel }
+        });
+         if (setInput) {
+           setInput('');
+           latestInputRef.current = '';
+         }
+         setFiles([]);
+         if (fileInputRef.current) {
+           fileInputRef.current.value = '';
+         }
+        return;
+    }
+
     if (!append) {
-      console.error("append関数が提供されていません。");
+      console.error("append関数またはhandleSubmit関数が提供されていません。");
       return;
     }
     if (!selectedModel) {
@@ -425,22 +460,29 @@ export function AIChat({
       return;
     }
 
-    console.log(`モデル '${selectedModel}' を使用してメッセージを送信します。`);
+    console.log(`モデル '${selectedModel}' を使用してメッセージを送信します (append)。`);
 
     try {
-      await append(
-        { content, role: 'user' },
-        { body: { model: selectedModel } }
-      );
-      if (setInput) {
-        setInput('');
-        latestInputRef.current = ''; // refも空にする
-      }
+        await append(
+            { content, role: 'user' },
+            {
+                data: { model: selectedModel },
+                experimental_attachments: attachments
+            }
+        );
+        if (setInput) {
+            setInput('');
+            latestInputRef.current = '';
+        }
+        setFiles([]);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
     } catch (error) {
-      console.error("メッセージ送信エラー:", error);
-      alert(`メッセージの送信中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
+        console.error("メッセージ送信エラー:", error);
+        alert(`メッセージの送信中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [append, selectedModel, setInput]);
+  }, [append, handleSubmit, selectedModel, setInput]);
 
   // --- SpeechSynthesis 関連の処理 ---
   useEffect(() => {
@@ -680,10 +722,16 @@ export function AIChat({
     const contentToUse = forceContent || latestInputRef.current || input;
     const trimmedInput = contentToUse.trim();
     
-    console.log('送信処理実行:', trimmedInput, '長さ:', trimmedInput.length);
-    if (!trimmedInput) return;
+    // --- Check if there is input OR files to send ---
+    if (!trimmedInput && (!files || files.length === 0)) {
+        console.log('送信するテキストもファイルもありません。');
+        return;
+    }
+    // --------------------------------------------
 
-    // "クリア" と入力された場合の処理を追加
+    console.log('送信処理実行:', trimmedInput, 'ファイル数:', files?.length ?? 0);
+
+    // "クリア" と入力された場合の処理 (ファイルがあってもクリアを優先)
     if (trimmedInput === 'クリア') {
       console.log('入力が "クリア" のため、メッセージをクリアします。');
       clearMessages();
@@ -691,10 +739,12 @@ export function AIChat({
         setInput('');
         latestInputRef.current = ''; // refも空にする
       }
+      setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return; // sendMessage をスキップ
     }
 
-    // "読み上げて" コマンドの処理
+    // "読み上げて" コマンドの処理 (ファイルがあっても読み上げを優先)
     if (trimmedInput === '読み上げて') {
       console.log('コマンド "読み上げて" を検出しました。');
       console.log('[読み上げてデバッグ] 現在の messages:', messages); // messages 配列の内容を確認
@@ -732,16 +782,30 @@ export function AIChat({
       return; // 通常の送信はスキップ
     }
 
-    await sendMessage(trimmedInput);
+    // --- Create FileList from File[] state before sending ---
+    let fileListToSend: FileList | undefined = undefined;
+    if (files.length > 0) {
+      const dataTransfer = new DataTransfer();
+      files.forEach(file => dataTransfer.items.add(file));
+      fileListToSend = dataTransfer.files;
+      console.log('Created FileList to send:', fileListToSend);
+    }
+    // ------------------------------------------------------
+
+    // --- Pass the dynamically created FileList ---
+    await sendMessage(trimmedInput, fileListToSend);
+    // Files state and input ref are cleared inside sendMessage now
+
   }, [
-    input, 
-    sendMessage, 
-    clearMessages, 
-    setInput, 
-    isSpeaking, 
-    stopSpeaking, 
+    input,
+    files,
+    sendMessage,
+    clearMessages,
+    setInput,
+    isSpeaking,
+    stopSpeaking,
     latestMessagesRef,
-    japaneseVoice // speakText が依存するため追加
+    japaneseVoice
   ]);
 
   // 音声認識の開始関数
@@ -1078,6 +1142,16 @@ export function AIChat({
     }
   }, [messages]);
 
+  // --- Add function to remove a file by index ---
+  const removeFile = useCallback((indexToRemove: number) => {
+    setFiles(prevFiles => prevFiles.filter((_, index) => index !== indexToRemove));
+    // Also reset the file input value if all files are removed, 
+    // otherwise the user can't re-select the same file
+    if (files.length === 1 && fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
+  }, [files.length]); // Depend on files.length to potentially reset input
+
   return (
     <div 
       className={`flex flex-col h-full ${isDarkMode ? 'bg-[#0d1117] text-[#e6edf3]' : 'bg-gray-100 text-gray-900'}`}
@@ -1165,6 +1239,30 @@ export function AIChat({
         className={`px-4 py-2 ${isDarkMode ? 'bg-[#0d1117]' : 'bg-gray-100'}`}
         suppressHydrationWarning
       >
+        {/* --- Add Attached Files Preview Area --- */}
+        {files.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2 border-t pt-2 pb-1 px-1 overflow-x-auto text-xs">
+            {files.map((file, index) => (
+              <div
+                key={index}
+                className={`flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full border ${isDarkMode ? 'bg-[#161b22] border-[#30363d] text-[#e6edf3]' : 'bg-gray-200 border-gray-300 text-gray-800'}`}
+              >
+                <span className="max-w-[100px] truncate" title={file.name}>{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  className={`p-0.5 rounded-full ${isDarkMode ? 'hover:bg-red-800 hover:bg-opacity-50 text-gray-400 hover:text-red-300' : 'hover:bg-red-200 text-gray-500 hover:text-red-600'}`}
+                  aria-label={`Remove ${file.name}`}
+                  suppressHydrationWarning
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* --- End Attached Files Preview Area --- */}
+
         <div className="flex items-center gap-2 relative">
           {/* Cursorスタイルの入力エリア */}
           <div className={`flex-1 relative flex items-center rounded-md border ${isDarkMode ? 'bg-[#0d1117] border-[#30363d]' : 'bg-white border-gray-300'}`}>
@@ -1210,6 +1308,32 @@ export function AIChat({
             
             {/* 右側のボタングループをフレックスで配置 */}
             <div className="flex items-center pr-2 gap-1">
+              {/* --- Add File Attachment Button --- */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`p-1 rounded hover:bg-opacity-20 ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'} ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                disabled={isLoading}
+                title="ファイルを添付"
+                suppressHydrationWarning
+              >
+                <Paperclip size={16} />
+              </button>
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                multiple
+                onChange={event => {
+                  if (event.target.files) {
+                    // --- Ensure conversion to File[] before setting state ---
+                    setFiles(Array.from(event.target.files));
+                    console.log('Selected files (as File[]):', Array.from(event.target.files));
+                  }
+                }}
+                className="hidden"
+                disabled={isLoading}
+              />
               {/* 読み上げ停止ボタン */}
               <button
                 type="button"

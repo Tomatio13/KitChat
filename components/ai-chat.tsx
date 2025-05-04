@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useCallback, useState, useRef } from 'react'
-import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX } from 'lucide-react'
+import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import TextareaAutosize from 'react-textarea-autosize'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1087,30 +1087,9 @@ export function AIChat({
       >
         <h3 className="text-base font-semibold flex items-center">
           <BrainCircuit className="mr-2 h-5 w-5" />
-          AIチャット
+          AI Assistant
         </h3>
         <div className="flex items-center gap-2">
-          {availableModels.length > 0 && (
-             <Select
-               value={selectedModel}
-               onValueChange={setSelectedModel}
-               disabled={isLoading}
-             >
-               <SelectTrigger 
-                 className={`w-[180px] h-8 text-xs ${isDarkMode ? 'bg-[#161b22] border-[#30363d]' : 'bg-white'}`}
-                 suppressHydrationWarning
-               >
-                 <SelectValue placeholder="モデルを選択..." />
-               </SelectTrigger>
-               <SelectContent>
-                 {availableModels.map((model) => (
-                   <SelectItem key={model.id} value={model.id} className="text-xs">
-                     {model.name}
-                   </SelectItem>
-                 ))}
-               </SelectContent>
-             </Select>
-          )}
           <Button
             variant="ghost"
             size="sm"
@@ -1119,8 +1098,7 @@ export function AIChat({
             className={`text-xs px-2 py-1 ${isDarkMode ? 'text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]' : 'text-gray-600 hover:bg-gray-200'}`}
             suppressHydrationWarning
           >
-            <Trash2 className="mr-1 h-3.5 w-3.5" />
-            クリア
+            <Plus className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -1184,62 +1162,95 @@ export function AIChat({
       {/* フォーム要素の再構築 */}
       <form 
         onSubmit={handleFormSubmitCallback} 
-        className={`p-4 border-t ${isDarkMode ? 'border-[#30363d] bg-[#0d1117]' : 'border-gray-200 bg-gray-100'}`}
+        className={`px-4 py-2 border-t ${isDarkMode ? 'border-[#30363d] bg-[#0d1117]' : 'border-gray-200 bg-gray-100'}`}
         suppressHydrationWarning
       >
-        <div className="flex items-start gap-2">
-          <TextareaAutosize
-            value={recognizedText ? `${input}${input && !input.endsWith(' ') ? ' ' : ''}${recognizedText}` : input}
-            onChange={handleTextareaChange}
-            onKeyDown={handleKeyDownCallback}
-            placeholder="AIに質問する... (Shift+Enterで改行)"
-            className={`flex-1 rounded-md text-sm resize-none border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${isDarkMode ? 'bg-[#161b22] border-[#30363d] text-[#e6edf3] placeholder-[#8b949e] focus:border-[#58a6ff] focus:ring-[#58a6ff]' : 'bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
-            disabled={isLoading || availableModels.length === 0}
-            minRows={1}
-            maxRows={6}
-            suppressHydrationWarning
-          />
-          <Button
-            type="button"
-            size="icon"
-            onClick={stopSpeaking}
-            className={`rounded-md ${ // スタイルを他のボタンに合わせる
-              isDarkMode
-                ? 'bg-[#21262d] hover:bg-[#30363d] text-white disabled:bg-[#161b22] disabled:text-[#484f58]' // ダークモードの無効時スタイル調整
-                : 'bg-gray-300 hover:bg-gray-400 text-gray-800 disabled:bg-gray-100 disabled:text-gray-400' // ライトモードの無効時スタイル調整
-            }`}
-            disabled={!isSpeaking} // isSpeakingがtrueの時のみ有効化
-            suppressHydrationWarning
-          >
-            <VolumeX size={18} />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            onClick={toggleSpeechRecognition}
-            className={`rounded-md ${ // スタイルを他のボタンに合わせる
-              isDarkMode
-                ? isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-[#21262d] hover:bg-[#30363d]'
-                : isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-300 hover:bg-gray-400'
-            } text-white`}
-            disabled={isSpeaking} // 読み上げ中は音声認識ボタンを無効化
-            suppressHydrationWarning
-          >
-            {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-          </Button>
-          <Button
-            type="submit"
-            size="icon"
-            disabled={isLoading || !input.trim() || availableModels.length === 0 || !selectedModel}
-            className={`rounded-md ${ // スタイルを他のボタンに合わせる
-              isDarkMode
-                ? 'bg-[#238636] hover:bg-[#2ea043] text-white disabled:bg-[#21262d] disabled:text-[#8b949e]'
-                : 'bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400'
-            }`}
-            suppressHydrationWarning
-          >
-            <Send size={18} />
-          </Button>
+        <div className="flex items-center gap-2 relative">
+          {/* Cursorスタイルの入力エリア */}
+          <div className={`flex-1 relative flex items-center rounded-md border ${isDarkMode ? 'bg-[#0d1117] border-[#30363d]' : 'bg-white border-gray-300'}`}>
+            {/* モデル選択ドロップダウン - 左側に配置 */}
+            {availableModels.length > 0 && (
+              <div className="pl-2">
+                <Select
+                  value={selectedModel}
+                  onValueChange={setSelectedModel}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger 
+                    className={`h-7 text-xs pr-2 pl-1 border-0 ${isDarkMode ? 'bg-transparent text-[#8b949e]' : 'bg-transparent text-gray-500'} focus:ring-0 focus:ring-offset-0`}
+                    suppressHydrationWarning
+                  >
+                    <SelectValue className="text-xs" placeholder="モデルを選択..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id} className="text-xs">
+                        {model.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {/* 境界線 - モデル選択とテキストエリアの間 */}
+            <div className={`h-5 w-px mx-1 ${isDarkMode ? 'bg-[#30363d]' : 'bg-gray-300'}`}></div>
+            
+            <TextareaAutosize
+              value={recognizedText ? `${input}${input && !input.endsWith(' ') ? ' ' : ''}${recognizedText}` : input}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDownCallback}
+              placeholder="AIに質問する... (Shift+Enterで改行)"
+              className={`flex-1 text-sm resize-none px-2 py-1.5 rounded-md ${isDarkMode ? 'bg-[#0d1117] text-[#e6edf3] placeholder-[#8b949e]' : 'bg-white text-gray-900 placeholder-gray-500'} focus:outline-none overflow-hidden`}
+              disabled={isLoading || availableModels.length === 0}
+              minRows={1}
+              maxRows={12}
+              suppressHydrationWarning
+            />
+            
+            {/* 右側のボタングループをフレックスで配置 */}
+            <div className="flex items-center pr-2 gap-1">
+              {/* 読み上げ停止ボタン */}
+              <button
+                type="button"
+                onClick={stopSpeaking}
+                className={`p-1 rounded hover:bg-opacity-20 ${isDarkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-200 text-gray-600'} ${!isSpeaking ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                disabled={!isSpeaking}
+                suppressHydrationWarning
+              >
+                <VolumeX size={16} />
+              </button>
+              
+              {/* 音声認識ボタン */}
+              <button
+                type="button"
+                onClick={toggleSpeechRecognition}
+                className={`p-1 rounded hover:bg-opacity-20 ${
+                  isListening 
+                    ? 'text-red-500' 
+                    : isDarkMode ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-200'
+                } ${isSpeaking ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                disabled={isSpeaking}
+                suppressHydrationWarning
+              >
+                {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              
+              {/* 送信ボタン */}
+              <button
+                type="submit"
+                disabled={isLoading || !input.trim() || availableModels.length === 0 || !selectedModel}
+                className={`p-1 rounded-md ${
+                  isDarkMode 
+                    ? 'text-blue-400 hover:bg-gray-700 hover:bg-opacity-20 disabled:text-gray-600' 
+                    : 'text-blue-600 hover:bg-gray-200 disabled:text-gray-400'
+                } ${(isLoading || !input.trim() || availableModels.length === 0 || !selectedModel) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                suppressHydrationWarning
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          </div>
         </div>
       </form>
     </div>

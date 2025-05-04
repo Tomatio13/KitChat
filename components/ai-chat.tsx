@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/select"
 import type { Message, CreateMessage } from 'ai/react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
-import ReactMarkdown from 'react-markdown'
-
+import ReactMarkdown, { Components } from 'react-markdown'
+import removeMarkdown from 'remove-markdown'
 
 interface AvailableModel {
   id: string;
@@ -73,6 +73,15 @@ interface SpeechRecognitionAlternative {
   confidence: number;
 }
 
+// SpeechSynthesisUtterance のインターフェースを定義 (必要に応じて)
+interface SpeechSynthesisVoice {
+  default: boolean;
+  lang: string;
+  localService: boolean;
+  name: string;
+  voiceURI: string;
+}
+
 // Window インターフェースを拡張
 declare global {
   interface Window {
@@ -91,7 +100,146 @@ const MessageItem = React.memo(({
   isLoading: boolean;
   isDarkMode: boolean;
 }) => {
-    // Markdownパーサーを使用したレンダリング
+    // 型定義を ReactMarkdown.Components に変更
+    const markdownComponents: Components = React.useMemo(() => ({
+      pre: ({ node, ...props }: any) => ( // node は一旦 any
+        <div className="my-0 rounded overflow-hidden">
+          <pre
+            className={`p-1 overflow-auto ${isDarkMode ? 'bg-[#0d1117] text-[#e6edf3]' : 'bg-gray-100 text-gray-800'}`}
+            suppressHydrationWarning
+            {...props}
+          />
+        </div>
+      ),
+      code: ({ node, className, children, ...props }: any) => { // node は一旦 any
+        const match = /language-(\w+)/.exec(className || '');
+        return (
+          <>
+            {match ? (
+              <div>
+                <div
+                  className={`px-1 py-0 text-[10px] ${isDarkMode ? 'bg-[#161b22] text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                  suppressHydrationWarning
+                >
+                  {match[1]}
+                </div>
+                <code
+                  className={className}
+                  suppressHydrationWarning
+                  {...props}
+                >
+                  {children}
+                </code>
+              </div>
+            ) : (
+              <code
+                className={`px-0.5 rounded ${isDarkMode ? 'bg-[#161b22] text-gray-300' : 'bg-gray-200 text-gray-700'}`}
+                suppressHydrationWarning
+                {...props}
+              >
+                {children}
+              </code>
+            )}
+          </>
+        );
+      },
+      a: ({ node, ...props }: any) => ( // node は一旦 any
+        <a
+          className={`${isDarkMode ? 'text-green-400' : 'text-green-600'} hover:underline break-words font-medium`}
+          target="_blank"
+          rel="noopener noreferrer"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      p: ({ node, ...props }: any) => ( // node は一旦 any
+        <p
+          className="my-0 break-words leading-tight"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      ul: ({ node, ...props }: any) => ( // node は一旦 any
+        <ul
+          className="list-disc pl-3 my-0"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      ol: ({ node, ...props }: any) => ( // node は一旦 any
+        <ol
+          className="list-decimal pl-3 my-0"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      li: ({ node, ...props }: any) => ( // node は一旦 any
+        <li
+          className="my-0 py-0 break-words [&>p]:my-0"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      h1: ({ node, ...props }: any) => ( // node は一旦 any
+        <h1
+          className="text-sm font-bold mt-0.5 mb-0 break-words"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      h2: ({ node, ...props }: any) => ( // node は一旦 any
+        <h2
+          className="text-xs font-bold mt-0.5 mb-0 break-words"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      h3: ({ node, ...props }: any) => ( // node は一旦 any
+        <h3
+          className="text-xs font-semibold mt-0.5 mb-0 break-words"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      blockquote: ({ node, ...props }: any) => ( // node は一旦 any
+        <blockquote
+          className={`pl-1 border-l ${isDarkMode ? 'border-gray-600 bg-[#161b22]' : 'border-gray-300 bg-gray-50'} my-0`}
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      table: ({ node, ...props }: any) => ( // node は一旦 any
+        <div className="overflow-x-auto my-0">
+          <table
+            className={`min-w-full border-collapse text-[10px] ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
+            suppressHydrationWarning
+            {...props}
+          />
+        </div>
+      ),
+      th: ({ node, ...props }: any) => ( // node は一旦 any
+        <th
+          className={`px-1 py-0 ${isDarkMode ? 'bg-[#21262d] border-gray-700' : 'bg-gray-100 border-gray-300'} border`}
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      td: ({ node, ...props }: any) => ( // node は一旦 any
+        <td
+          className={`px-1 py-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-300'} border break-words`}
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+      hr: ({ node, ...props }: any) => ( // node は一旦 any
+        <hr
+          className="my-0 border-t"
+          suppressHydrationWarning
+          {...props}
+        />
+      ),
+    }), [isDarkMode]); // isDarkMode への依存を明記
+
     const MessageContent = React.useMemo(() => (
       <div className="whitespace-pre-wrap text-sm leading-relaxed">
         {message.role === 'user' ? (
@@ -101,150 +249,13 @@ const MessageItem = React.memo(({
           // AIメッセージはMarkdownとして表示
           <ReactMarkdown
             className="markdown-content leading-none text-xs"
-            components={{
-              pre: ({ node, ...props }) => (
-                <div className="my-0 rounded overflow-hidden">
-                  <pre 
-                    className={`p-1 overflow-auto ${isDarkMode ? 'bg-[#0d1117] text-[#e6edf3]' : 'bg-gray-100 text-gray-800'}`}
-                    suppressHydrationWarning
-                    {...props}
-                  />
-                </div>
-              ),
-              code: ({ node, className, children, ...props }) => {
-                const match = /language-(\w+)/.exec(className || '');
-                return (
-                  <>
-                    {match ? (
-                      <div>
-                        <div 
-                          className={`px-1 py-0 text-[10px] ${isDarkMode ? 'bg-[#161b22] text-gray-300' : 'bg-gray-200 text-gray-700'}`}
-                          suppressHydrationWarning
-                        >
-                          {match[1]}
-                        </div>
-                        <code 
-                          className={className}
-                          suppressHydrationWarning
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      </div>
-                    ) : (
-                      <code 
-                        className={`px-0.5 rounded ${isDarkMode ? 'bg-[#161b22] text-gray-300' : 'bg-gray-200 text-gray-700'}`}
-                        suppressHydrationWarning
-                        {...props}
-                      >
-                        {children}
-                      </code>
-                    )}
-                  </>
-                );
-              },
-              a: ({ node, ...props }) => (
-                <a 
-                  className={`${isDarkMode ? 'text-green-400' : 'text-green-600'} hover:underline break-words font-medium`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              p: ({ node, ...props }) => (
-                <p 
-                  className="my-0 break-words leading-tight"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              ul: ({ node, ...props }) => (
-                <ul 
-                  className="list-disc pl-3 my-0"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              ol: ({ node, ...props }) => (
-                <ol 
-                  className="list-decimal pl-3 my-0"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              li: ({ node, ...props }) => (
-                <li 
-                  className="my-0 py-0 break-words"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              h1: ({ node, ...props }) => (
-                <h1 
-                  className="text-sm font-bold mt-0.5 mb-0 break-words"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              h2: ({ node, ...props }) => (
-                <h2 
-                  className="text-xs font-bold mt-0.5 mb-0 break-words"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              h3: ({ node, ...props }) => (
-                <h3 
-                  className="text-xs font-semibold mt-0.5 mb-0 break-words"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              blockquote: ({ node, ...props }) => (
-                <blockquote 
-                  className={`pl-1 border-l ${isDarkMode ? 'border-gray-600 bg-[#161b22]' : 'border-gray-300 bg-gray-50'} my-0`}
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              table: ({ node, ...props }) => (
-                <div className="overflow-x-auto my-0">
-                  <table 
-                    className={`min-w-full border-collapse text-[10px] ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}
-                    suppressHydrationWarning
-                    {...props}
-                  />
-                </div>
-              ),
-              th: ({ node, ...props }) => (
-                <th 
-                  className={`px-1 py-0 ${isDarkMode ? 'bg-[#21262d] border-gray-700' : 'bg-gray-100 border-gray-300'} border`}
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              td: ({ node, ...props }) => (
-                <td 
-                  className={`px-1 py-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-300'} border break-words`}
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-              hr: ({ node, ...props }) => (
-                <hr
-                  className="my-0 border-t"
-                  suppressHydrationWarning
-                  {...props}
-                />
-              ),
-            }}
+            components={markdownComponents} // 型定義されたコンポーネントを使用
           >
             {message.content}
           </ReactMarkdown>
         )}
       </div>
-    ), [message.content, message.role, isDarkMode]);
+    ), [message.content, message.role, markdownComponents]); // markdownComponents への依存を更新
 
     return (
         <div className="pb-3"> {/* Virtuosoのアイテム間のスペース */}
@@ -309,7 +320,7 @@ const MessageList = React.memo(({
       style={{ flex: 1 }} // 親要素の高さに追従させる
       data={messages} // 表示するデータ配列
       followOutput="smooth" // 新しい項目が追加されたらスムーズに追従スクロール
-      itemContent={(index, message) => (
+      itemContent={(index: number, message: Message) => (
         // 個々のメッセージアイテムをレンダリング
         <MessageItem
           message={message}
@@ -374,18 +385,31 @@ export function AIChat({
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   // 無音検出用の変数を追加
   const lastSpeechRef = useRef<number>(0);
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 音声認識での送信を追跡する変数
   const hasSentAfterRecognitionRef = useRef<boolean>(false);
   // 最新の入力内容を直接保持するrefを追加（Reactの状態更新の非同期性を回避）
   const latestInputRef = useRef<string>('');
   // 無音検出による停止かどうかを追跡する変数
   const stoppedDueToSilenceRef = useRef<boolean>(false);
+  // 読み上げ関連の状態
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [japaneseVoice, setJapaneseVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null); // 読み上げインスタンスを保持
+  // 読み上げ状態をポーリングで監視するタイマー
+  const speakingMonitorRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // messages の最新状態を保持する Ref を追加
+  const latestMessagesRef = useRef<Message[]>([]);
 
   // 入力内容が変更されたらrefも更新する
   useEffect(() => {
     latestInputRef.current = input;
   }, [input]);
+
+  // messages prop が変更されたら Ref を更新
+  useEffect(() => {
+    latestMessagesRef.current = messages;
+  }, [messages]);
   
   // 送信関数を事前に定義
   const sendMessage = useCallback(async (content: string) => {
@@ -416,6 +440,206 @@ export function AIChat({
     }
   }, [append, selectedModel, setInput]);
 
+  // --- SpeechSynthesis 関連の処理 ---
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      // console.log("Available voices:", voices); // デバッグ用
+      const voice = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja-')) || null;
+      // console.log("Selected Japanese voice:", voice); // デバッグ用
+      setJapaneseVoice(voice);
+    };
+
+    // 初回読み込みと変更時の対応
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    // クリーンアップ
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel(); // コンポーネント離脱時に読み上げ停止
+      }
+    };
+  }, []);
+
+  // テキスト読み上げ関数
+  const speakText = useCallback((text: string) => {
+    // --- 追加: 読み上げ開始時に音声認識を停止 ---
+    if (isListening || recognitionRef.current) {
+      console.log('読み上げ開始のため、音声認識を停止します');
+      stopRecognition();
+    }
+    // ------------------------------------------
+
+    if (!window.speechSynthesis || !japaneseVoice) {
+      alert("音声合成が利用できないか、日本語音声が見つかりません。");
+      return;
+    }
+
+    // --- 修正: remove-markdown ライブラリを使用してMarkdownを除去 ---
+    const plainText = removeMarkdown(text);
+    if (!plainText) {
+      console.warn('Markdown除去後のテキストが空です。');
+      return; // 除去後テキストがなければ終了
+    }
+    console.log('Markdown除去後のテキスト (ライブラリ使用):', plainText.substring(0, 50) + '...');
+
+
+    // --- 修正: 既存の読み上げをキャンセルし、状態をリセット ---
+    console.log('speakText が呼ばれました。既存の読み上げをキャンセルします。');
+    window.speechSynthesis.cancel(); // まずキャンセルを試みる
+
+    // 既存のポーリングを停止 (念のため)
+    if (speakingMonitorRef.current) {
+      clearInterval(speakingMonitorRef.current);
+      speakingMonitorRef.current = null;
+    }
+    utteranceRef.current = null; // utterance の参照もクリア
+
+    console.log('キャンセル後、新しい読み上げ処理を開始します。');
+
+    // -------- 長文対策: テキストをチャンクに分割して連続読み上げ --------
+    const MAX_CHUNK_LENGTH = 180;
+    const preliminaryChunks = plainText
+      .split(/(?<=[。．！!？?]\s|\n)/g)
+      .flatMap((chunk: string) => {
+        if (chunk.length <= MAX_CHUNK_LENGTH) return [chunk];
+        const parts: string[] = [];
+        for (let i = 0; i < chunk.length; i += MAX_CHUNK_LENGTH) {
+          parts.push(chunk.slice(i, i + MAX_CHUNK_LENGTH));
+        }
+        return parts;
+      })
+      .filter((c: string) => c.trim().length > 0);
+
+    if (preliminaryChunks.length === 0) {
+      console.warn('読み上げるテキストがありません。');
+      return; // テキストがなければここで終了
+    }
+
+    console.log(`読み上げを ${preliminaryChunks.length} チャンクに分割して開始します`);
+
+    let currentIndex = 0;
+
+    const speakNextChunk = () => {
+      if (currentIndex >= preliminaryChunks.length) {
+        // この地点では完了をログするのみ。実際の状態更新は onend かポーリングで行う
+        console.log('すべてのチャンクの speak() 呼び出しが完了しました');
+        // setIsSpeaking(false); // ここでは呼ばない
+        // utteranceRef.current = null; // ここではクリアしない
+        return;
+      }
+
+      const chunkText = preliminaryChunks[currentIndex];
+      const chunkUtterance = new SpeechSynthesisUtterance(chunkText);
+      chunkUtterance.voice = japaneseVoice;
+      chunkUtterance.lang = japaneseVoice.lang;
+      chunkUtterance.rate = 1;
+      chunkUtterance.pitch = 1;
+      chunkUtterance.volume = 1;
+
+      chunkUtterance.onstart = () => {
+        if (currentIndex === 0) {
+          console.log('読み上げ開始 (onstart イベント)');
+          setIsSpeaking(true); // onstart で true に設定
+        }
+        console.log(`チャンク ${currentIndex + 1}/${preliminaryChunks.length} 読み上げ開始 (onstart)`);
+      };
+
+      chunkUtterance.onend = () => {
+        console.log(`チャンク ${currentIndex + 1}/${preliminaryChunks.length} 読み上げ終了 (onend)`);
+        currentIndex += 1;
+        if (currentIndex < preliminaryChunks.length) {
+          speakNextChunk();
+        } else {
+          console.log('最後のチャンクの読み上げが完了しました (onend)');
+          setIsSpeaking(false); // 最後の onend で false に設定
+          if (speakingMonitorRef.current) {
+            clearInterval(speakingMonitorRef.current);
+            speakingMonitorRef.current = null;
+          }
+          utteranceRef.current = null;
+        }
+      };
+
+      chunkUtterance.onerror = (event) => {
+        console.error('音声合成エラー:', event.error);
+        if (event.error === 'interrupted') {
+          console.warn('読み上げが中断されました (interrupted)。状態をリセットします。');
+        } else {
+          alert(`音声の読み上げ中にエラーが発生しました: ${event.error}`);
+        }
+        setIsSpeaking(false); // エラー時も false に設定
+        if (speakingMonitorRef.current) {
+          clearInterval(speakingMonitorRef.current);
+          speakingMonitorRef.current = null;
+        }
+        utteranceRef.current = null;
+      };
+
+      utteranceRef.current = chunkUtterance;
+      window.speechSynthesis.speak(chunkUtterance);
+    };
+
+    // 1 つ目のチャンクからスタート
+    speakNextChunk();
+
+    // ---------- フォールバック: ポーリングで speaking 状態を監視 ----------
+    // speakNextChunk の初回呼び出し後にポーリングを開始
+    speakingMonitorRef.current = setInterval(() => {
+      const stillSpeaking = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+      if (isSpeaking && !stillSpeaking) {
+        console.log('ポーリングにより読み上げ終了を検出しました。');
+        setIsSpeaking(false);
+        if (speakingMonitorRef.current) {
+          clearInterval(speakingMonitorRef.current);
+          speakingMonitorRef.current = null;
+        }
+        utteranceRef.current = null;
+      } else if (!isSpeaking && speakingMonitorRef.current) {
+        clearInterval(speakingMonitorRef.current);
+        speakingMonitorRef.current = null;
+      }
+    }, 1000);
+
+  }, [japaneseVoice]); // isSpeaking を依存配列から削除
+
+  // 読み上げ停止関数
+  const stopSpeaking = useCallback(() => {
+    // isSpeaking が true かどうかをチェックし、さらに speech API の状態も確認
+    if (isSpeaking && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+      console.log('読み上げを手動で停止します');
+      window.speechSynthesis.cancel(); // キューも含めてキャンセル
+      setIsSpeaking(false); // キャンセルされたら状態も更新
+      if (speakingMonitorRef.current) {
+        clearInterval(speakingMonitorRef.current);
+        speakingMonitorRef.current = null;
+      }
+      utteranceRef.current = null; // 参照をクリア
+    } else {
+      console.log('読み上げはすでに停止しているか、開始されていません。');
+      if (isSpeaking) setIsSpeaking(false); // 状態がずれている可能性があるので false に
+      if (speakingMonitorRef.current) {
+        clearInterval(speakingMonitorRef.current);
+        speakingMonitorRef.current = null;
+      }
+      utteranceRef.current = null;
+    }
+  }, [isSpeaking]); // isSpeaking を依存配列に追加
+  // --- SpeechSynthesis 関連の処理 ここまで ---
+
+  // 新しい onChange ハンドラ
+  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // 読み上げ中に入力があったら停止
+    if (isSpeaking) {
+      console.log('入力検出のため、読み上げを停止します');
+      stopSpeaking();
+    }
+    // 元の handleInputChange を呼び出して状態を更新
+    handleInputChange(e);
+  }, [isSpeaking, stopSpeaking, handleInputChange]); // 依存関係を追加
+
   // handleFormSubmit を useCallback でメモ化
   const handleFormSubmitCallback = useCallback(async (e?: React.FormEvent<HTMLFormElement>, forceContent?: string) => {
     e?.preventDefault();
@@ -438,8 +662,55 @@ export function AIChat({
       return; // sendMessage をスキップ
     }
 
+    // "読み上げて" コマンドの処理
+    if (trimmedInput === '読み上げて') {
+      console.log('コマンド "読み上げて" を検出しました。');
+      console.log('[読み上げてデバッグ] 現在の messages:', messages); // messages 配列の内容を確認
+
+      // 読み上げ中なら停止
+      if (isSpeaking) {
+        console.log('[読み上げて] 読み上げ中なので停止します。');
+        stopSpeaking(); // 停止処理を呼び出す
+         if (setInput) {
+            setInput('');
+            latestInputRef.current = '';
+         }
+        return; // 停止後は何もしない
+      }
+
+      // 直前のAI応答を探す (Ref を使用)
+      const lastAiMessage = latestMessagesRef.current.slice().reverse().find(m => m.role === 'assistant');
+      console.log('[読み上げてデバッグ] 検索結果 (lastAiMessage using Ref):', lastAiMessage);
+
+      if (lastAiMessage && lastAiMessage.content) {
+        // ReactMarkdown でレンダリングされる前のプレーンテキストが必要
+        console.log('[読み上げてデバッグ] AI応答が見つかりました。読み上げを実行します:', lastAiMessage.content.substring(0, 50) + '...');
+        // ここでは単純に content を使うが、Markdown要素を除去する処理が必要な場合もある
+        speakText(lastAiMessage.content);
+      } else {
+        console.warn('[読み上げてデバッグ] 読み上げるAIの応答が見つかりませんでした。'); // 警告ログに変更
+        alert("読み上げるAIの応答が見つかりません。");
+      }
+
+      // 入力欄をクリア
+      if (setInput) {
+        setInput('');
+        latestInputRef.current = ''; // refも空にする
+      }
+      return; // 通常の送信はスキップ
+    }
+
     await sendMessage(trimmedInput);
-  }, [input, sendMessage, clearMessages, setInput]);
+  }, [
+    input, 
+    sendMessage, 
+    clearMessages, 
+    setInput, 
+    isSpeaking, 
+    stopSpeaking, 
+    latestMessagesRef,
+    japaneseVoice // speakText が依存するため追加
+  ]);
 
   // 音声認識の停止処理
   const stopRecognition = useCallback(() => {
@@ -464,6 +735,13 @@ export function AIChat({
 
   // 音声認識開始関数
   const startSpeechRecognition = useCallback(() => {
+    // --- 追加: 読み上げ中は開始しない --- 
+    if (isSpeaking) {
+      console.log('[startSpeechRecognition] 読み上げ中のため、音声認識の開始を中断します。');
+      return;
+    }
+    // ------------------------------------
+
     // ブラウザに音声認識APIがあるか確認
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -582,20 +860,61 @@ export function AIChat({
       };
 
       recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.error(`[${new Date().toISOString()}] 音声認識エラー (onerror):`, event.error);
-        stopRecognition();
-        
-        // エラー後も音声認識を再開試行
-        setTimeout(() => {
-          if (!recognitionRef.current && !hasSentAfterRecognitionRef.current) {
-            console.log('エラー後に音声認識を再開します');
-            startSpeechRecognition();
-          }
-        }, 1000);
+        // --- 追加: 読み上げ中は処理しない --- 
+        if (isSpeaking) {
+          console.log('[onerror] 読み上げ中のため、エラーハンドリングと再開処理をスキップします。');
+          // 読み上げ中に認識が停止しても、状態だけはリセットしておく
+          if (recognitionRef.current) recognitionRef.current = null;
+          if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+          setIsListening(false);
+          setRecognizedText("");
+          return;
+        }
+        // ----------------------------------
+
+        // エラーの種類によって処理を分岐
+        if (event.error === 'no-speech') {
+          console.warn(`[${new Date().toISOString()}] 音声認識エラー (音声未検出):`, event.error);
+          // no-speech の場合はアラートを表示せず、単に停止する
+          stopRecognition();
+          
+          // 読み上げ中でなく、まだ送信もしていない場合に再開を試みる
+          setTimeout(() => {
+            if (!isSpeaking && !recognitionRef.current && !hasSentAfterRecognitionRef.current) {
+              console.log('音声未検出エラー後、読み上げ中でないため音声認識を再開します');
+              startSpeechRecognition();
+            }
+          }, 1000);
+        } else {
+          console.error(`[${new Date().toISOString()}] 音声認識エラー (onerror):`, event.error);
+          alert(`音声認識中にエラーが発生しました: ${event.error}`); // 他のエラーの場合はアラート表示
+          stopRecognition();
+          
+          // 他のエラーの場合も、読み上げ中でなく、まだ送信もしていない場合に再開を試みる
+          setTimeout(() => {
+            if (!isSpeaking && !recognitionRef.current && !hasSentAfterRecognitionRef.current) {
+              console.log('エラー後に音声認識を再開します');
+              startSpeechRecognition();
+            }
+          }, 1000);
+        }
       };
 
       recognition.onend = () => {
         console.log(`[${new Date().toISOString()}] 音声認識終了 (onend)`);
+
+        // --- 追加: 読み上げ中は再開処理をしない --- 
+        if (isSpeaking) {
+          console.log('[onend] 読み上げ中のため、後続の送信チェックと再開処理をスキップします。');
+          // 状態のリセットのみ行う
+          if (recognitionRef.current) recognitionRef.current = null;
+          if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+          setIsListening(false);
+          setRecognizedText("");
+          return;
+        }
+        // ---------------------------------------
+
         // リソースのクリーンアップ
         if (recognitionRef.current) {
           recognitionRef.current = null;
@@ -610,7 +929,13 @@ export function AIChat({
         setRecognizedText("");
         
         // onendイベントの場合も入力があれば送信
+        // --- 修正: 読み上げ中でない場合のみ再開を試みる ---
         setTimeout(() => {
+          if (isSpeaking) {
+            console.log('読み上げ中のため、音声認識の自動再開をスキップします。');
+            return;
+          }
+
           const currentInput = latestInputRef.current || input;
           console.log('音声認識終了後の送信処理を呼び出し, 現在の入力:', currentInput.trim());
           
@@ -622,22 +947,28 @@ export function AIChat({
                 setTimeout(() => {
                   hasSentAfterRecognitionRef.current = false;
                   // 無音検出による停止でも再開する（フラグをチェックしない）
-                  if (!recognitionRef.current) {
+                  // --- 修正: 読み上げ中でないことも確認 ---
+                  if (!recognitionRef.current && !isSpeaking) { 
                     console.log('送信後に音声認識を再開します');
                     // 停止フラグをリセット
                     stoppedDueToSilenceRef.current = false;
                     startSpeechRecognition();
+                  } else if (isSpeaking) {
+                    console.log('送信後だが読み上げ中のため音声認識は再開しません');
                   }
                 }, 500);
               });
           } else if (!hasSentAfterRecognitionRef.current) {
             // 入力が空でも音声認識を再開（無音検出チェックを行わない）
             setTimeout(() => {
-              if (!recognitionRef.current) {
+              // --- 修正: 読み上げ中でないことも確認 ---
+              if (!recognitionRef.current && !isSpeaking) {
                 console.log('入力が空ですが、音声認識を再開します');
                 // 停止フラグをリセット
                 stoppedDueToSilenceRef.current = false;
                 startSpeechRecognition();
+              } else if (isSpeaking) {
+                console.log('入力が空で読み上げ中のため音声認識は再開しません');
               }
             }, 500);
           }
@@ -669,6 +1000,13 @@ export function AIChat({
       // 音声認識を停止
       stopRecognition();
     } else {
+      // --- 追加: 読み上げ中は開始しない ---
+      if (isSpeaking) {
+          console.log('読み上げ中のため、音声認識は開始しません。');
+          alert('現在、メッセージを読み上げています。読み上げが完了してから再度お試しください。');
+          return;
+      }
+      // ----------------------------------
       console.log('音声認識を開始します');
       
       // 音声認識開始前にフラグをリセット
@@ -682,8 +1020,9 @@ export function AIChat({
   useEffect(() => {
     return () => {
       stopRecognition();
+      stopSpeaking(); // アンマウント時に読み上げも停止
     };
-  }, [stopRecognition]);
+  }, [stopRecognition, stopSpeaking]); // stopSpeaking を依存関係に追加
 
   useEffect(() => {
     const fetchAvailableModels = async () => {
@@ -806,8 +1145,7 @@ export function AIChat({
                     ? isListening ? '#0d1117' : '#21262d' 
                     : isListening ? '#e5e7eb' : '#d1d5db'
                 }}
-                suppressHydrationWarning
-              />
+              ></div>
             ))}
           </div>
           <style jsx>{`
@@ -837,6 +1175,7 @@ export function AIChat({
         </div>
       </div>
 
+      {/* フォーム要素の再構築 */}
       <form 
         onSubmit={handleFormSubmitCallback} 
         className={`p-4 border-t ${isDarkMode ? 'border-[#30363d] bg-[#0d1117]' : 'border-gray-200 bg-gray-100'}`}
@@ -845,7 +1184,7 @@ export function AIChat({
         <div className="flex items-start gap-2">
           <TextareaAutosize
             value={recognizedText ? `${input}${input && !input.endsWith(' ') ? ' ' : ''}${recognizedText}` : input}
-            onChange={handleInputChange}
+            onChange={handleTextareaChange}
             onKeyDown={handleKeyDownCallback}
             placeholder="AIに質問する... (Shift+Enterで改行)"
             className={`flex-1 rounded-md text-sm resize-none border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${isDarkMode ? 'bg-[#161b22] border-[#30363d] text-[#e6edf3] placeholder-[#8b949e] focus:border-[#58a6ff] focus:ring-[#58a6ff]' : 'bg-white border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
@@ -863,6 +1202,7 @@ export function AIChat({
                 ? isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-[#21262d] hover:bg-[#30363d]'
                 : isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-300 hover:bg-gray-400'
             } text-white`}
+            disabled={isSpeaking} 
             suppressHydrationWarning
           >
             {isListening ? <MicOff size={18} /> : <Mic size={18} />}
@@ -884,4 +1224,4 @@ export function AIChat({
       </form>
     </div>
   )
-} 
+}

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useCallback, useState, useRef } from 'react'
-import { Send, Trash2, BrainCircuit, Mic, MicOff } from 'lucide-react'
+import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import TextareaAutosize from 'react-textarea-autosize'
 import { Card, CardContent } from '@/components/ui/card'
@@ -594,11 +594,14 @@ export function AIChat({
 
       chunkUtterance.onerror = (event) => {
         console.error('音声合成エラー:', event.error);
+        // --- 修正: interrupted エラーの場合は警告ログのみとし、アラートは表示しない ---
         if (event.error === 'interrupted') {
           console.warn('読み上げが中断されました (interrupted)。状態をリセットします。');
         } else {
+          // interrupted 以外のエラーの場合のみアラートを表示
           alert(`音声の読み上げ中にエラーが発生しました: ${event.error}`);
         }
+        // --------------------------------------------------------------------
         setIsSpeaking(false); // エラー時も false に設定
         if (speakingMonitorRef.current) {
           clearInterval(speakingMonitorRef.current);
@@ -1199,13 +1202,27 @@ export function AIChat({
           <Button
             type="button"
             size="icon"
+            onClick={stopSpeaking}
+            className={`rounded-md ${ // スタイルを他のボタンに合わせる
+              isDarkMode
+                ? 'bg-[#21262d] hover:bg-[#30363d] text-white disabled:bg-[#161b22] disabled:text-[#484f58]' // ダークモードの無効時スタイル調整
+                : 'bg-gray-300 hover:bg-gray-400 text-gray-800 disabled:bg-gray-100 disabled:text-gray-400' // ライトモードの無効時スタイル調整
+            }`}
+            disabled={!isSpeaking} // isSpeakingがtrueの時のみ有効化
+            suppressHydrationWarning
+          >
+            <VolumeX size={18} />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
             onClick={toggleSpeechRecognition}
-            className={`rounded-md ${
+            className={`rounded-md ${ // スタイルを他のボタンに合わせる
               isDarkMode
                 ? isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-[#21262d] hover:bg-[#30363d]'
                 : isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-300 hover:bg-gray-400'
             } text-white`}
-            disabled={isSpeaking} 
+            disabled={isSpeaking} // 読み上げ中は音声認識ボタンを無効化
             suppressHydrationWarning
           >
             {isListening ? <MicOff size={18} /> : <Mic size={18} />}
@@ -1214,7 +1231,7 @@ export function AIChat({
             type="submit"
             size="icon"
             disabled={isLoading || !input.trim() || availableModels.length === 0 || !selectedModel}
-            className={`rounded-md ${
+            className={`rounded-md ${ // スタイルを他のボタンに合わせる
               isDarkMode
                 ? 'bg-[#238636] hover:bg-[#2ea043] text-white disabled:bg-[#21262d] disabled:text-[#8b949e]'
                 : 'bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400'

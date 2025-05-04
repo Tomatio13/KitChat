@@ -400,6 +400,8 @@ export function AIChat({
   const speakingMonitorRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // messages の最新状態を保持する Ref を追加
   const latestMessagesRef = useRef<Message[]>([]);
+  // --- 追加: 再開抑制フラグ ---
+  const suppressRecognitionRestartRef = useRef<boolean>(false);
 
   // 入力内容が変更されたらrefも更新する
   useEffect(() => {
@@ -463,15 +465,42 @@ export function AIChat({
     };
   }, []);
 
-  // テキスト読み上げ関数
+  // --- 修正: stopRecognition を先に定義 ---
+  const stopRecognition = useCallback(() => {
+    console.log('音声認識を停止します');
+    if (recognitionRef.current) {
+      try {
+        const currentRecognition = recognitionRef.current;
+        const originalOnEnd = currentRecognition.onend;
+        currentRecognition.onend = () => {
+          console.log('[stopRecognition] onend temporarily disabled during stop().');
+        };
+        currentRecognition.stop();
+        console.log('[stopRecognition] Called recognition.stop()');
+      } catch (error) {
+        console.error('音声認識停止エラー:', error);
+      }
+      recognitionRef.current = null;
+    }
+    if (silenceTimerRef.current) {
+      clearInterval(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    setIsListening(false);
+    setRecognizedText("");
+  }, []);
+
+  // --- speakText の定義 (stopRecognition の後) ---
   const speakText = useCallback((text: string) => {
-    // --- 追加: 読み上げ開始時に音声認識を停止 ---
     if (isListening || recognitionRef.current) {
       console.log('読み上げ開始のため、音声認識を停止します');
-      stopRecognition();
+      suppressRecognitionRestartRef.current = true;
+      stopRecognition(); // これでエラーにならないはず
+      setTimeout(() => {
+        suppressRecognitionRestartRef.current = false;
+        console.log('[suppressRecognitionRestartRef] フラグ解除');
+      }, 300);
     }
-    // ------------------------------------------
-
     if (!window.speechSynthesis || !japaneseVoice) {
       alert("音声合成が利用できないか、日本語音声が見つかりません。");
       return;
@@ -603,9 +632,8 @@ export function AIChat({
       }
     }, 1000);
 
-  }, [japaneseVoice]); // isSpeaking を依存配列から削除
+  }, [japaneseVoice, isSpeaking, stopRecognition]);
 
-  // 読み上げ停止関数
   const stopSpeaking = useCallback(() => {
     // isSpeaking が true かどうかをチェックし、さらに speech API の状態も確認
     if (isSpeaking && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
@@ -627,7 +655,6 @@ export function AIChat({
       utteranceRef.current = null;
     }
   }, [isSpeaking]); // isSpeaking を依存配列に追加
-  // --- SpeechSynthesis 関連の処理 ここまで ---
 
   // 新しい onChange ハンドラ
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -712,36 +739,12 @@ export function AIChat({
     japaneseVoice // speakText が依存するため追加
   ]);
 
-  // 音声認識の停止処理
-  const stopRecognition = useCallback(() => {
-    console.log('音声認識を停止します');
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (error) {
-        console.error('音声認識停止エラー:', error);
-      }
-      recognitionRef.current = null;
-    }
-    
-    if (silenceTimerRef.current) {
-      clearInterval(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    
-    setIsListening(false);
-    setRecognizedText("");
-  }, []);
-
-  // 音声認識開始関数
+  // 音声認識の開始関数
   const startSpeechRecognition = useCallback(() => {
-    // --- 追加: 読み上げ中は開始しない --- 
     if (isSpeaking) {
       console.log('[startSpeechRecognition] 読み上げ中のため、音声認識の開始を中断します。');
       return;
     }
-    // ------------------------------------
-
     // ブラウザに音声認識APIがあるか確認
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -903,15 +906,21 @@ export function AIChat({
       recognition.onend = () => {
         console.log(`[${new Date().toISOString()}] 音声認識終了 (onend)`);
 
-        // --- 追加: 読み上げ中は再開処理をしない --- 
-        if (isSpeaking) {
-          console.log('[onend] 読み上げ中のため、後続の送信チェックと再開処理をスキップします。');
-          // 状態のリセットのみ行う
-          if (recognitionRef.current) recognitionRef.current = null;
-          if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
-          setIsListening(false);
-          setRecognizedText("");
-          return;
+        // --- 追加: 再開抑制フラグをチェック ---
+        if (suppressRecognitionRestartRef.current) {
+            console.log('[onend] 読み上げ開始直後のため、音声認識の再開を抑制します。');
+            // suppressRecognitionRestartRef.current = false; // フラグは speakText 側で解除
+            // クリーンアップのみ実行
+            if (recognitionRef.current) {
+                recognitionRef.current = null;
+            }
+            if (silenceTimerRef.current) {
+                clearInterval(silenceTimerRef.current);
+                silenceTimerRef.current = null;
+            }
+            setIsListening(false);
+            setRecognizedText("");
+            return; // 再開処理をスキップ
         }
         // ---------------------------------------
 
@@ -946,11 +955,9 @@ export function AIChat({
               .then(() => {
                 setTimeout(() => {
                   hasSentAfterRecognitionRef.current = false;
-                  // 無音検出による停止でも再開する（フラグをチェックしない）
-                  // --- 修正: 読み上げ中でないことも確認 ---
+                  // --- 修正: isSpeaking 再チェック ---
                   if (!recognitionRef.current && !isSpeaking) { 
                     console.log('送信後に音声認識を再開します');
-                    // 停止フラグをリセット
                     stoppedDueToSilenceRef.current = false;
                     startSpeechRecognition();
                   } else if (isSpeaking) {
@@ -959,18 +966,14 @@ export function AIChat({
                 }, 500);
               });
           } else if (!hasSentAfterRecognitionRef.current) {
-            // 入力が空でも音声認識を再開（無音検出チェックを行わない）
-            setTimeout(() => {
-              // --- 修正: 読み上げ中でないことも確認 ---
-              if (!recognitionRef.current && !isSpeaking) {
+            // --- 修正: isSpeaking 再チェック ---
+            if (!recognitionRef.current && !isSpeaking) {
                 console.log('入力が空ですが、音声認識を再開します');
-                // 停止フラグをリセット
                 stoppedDueToSilenceRef.current = false;
                 startSpeechRecognition();
-              } else if (isSpeaking) {
+            } else if (isSpeaking) {
                 console.log('入力が空で読み上げ中のため音声認識は再開しません');
-              }
-            }, 500);
+            }
           }
         }, 500);
       };
@@ -983,9 +986,9 @@ export function AIChat({
       console.log(`[${new Date().toISOString()}] recognition.start() を呼び出しました。`);
     } catch (error) {
       console.error('音声認識の初期化エラー:', error);
-      stopRecognition();
+      stopRecognition(); // エラー時も停止処理を呼ぶ
     }
-  }, [setInput, stopRecognition, input, handleFormSubmitCallback]);
+  }, [setInput, input, handleFormSubmitCallback, isSpeaking, speakText, stopRecognition]);
 
   // 音声認識の切り替え
   const toggleSpeechRecognition = useCallback(() => {
@@ -1014,7 +1017,7 @@ export function AIChat({
       stoppedDueToSilenceRef.current = false; // 無音停止フラグをリセット
       startSpeechRecognition();
     }
-  }, [isListening, startSpeechRecognition, stopRecognition]);
+  }, [isListening, startSpeechRecognition, stopRecognition, isSpeaking]);
 
   // クリーンアップ
   useEffect(() => {
@@ -1150,14 +1153,14 @@ export function AIChat({
           </div>
           <style jsx>{`
             @keyframes knightRiderLed {
-              0%, 100% { 
+              0%, 100% {
                 transform: scale(1);
                 background-color: ${isDarkMode ? '#0d1117' : '#e5e7eb'};
                 box-shadow: none;
               }
-              15%, 35% { 
+              15%, 35% {
                 transform: scale(1.2);
-                background-color: ${isSpeaking ? '#3b82f6' : isListening ? '#ef4444' : (isDarkMode ? '#0d1117' : '#e5e7eb')};
+                background-color: ${isSpeaking ? '#3b82f6' /* 青 */ : isListening ? '#ef4444' /* 赤 */ : (isDarkMode ? '#0d1117' : '#e5e7eb')};
                 box-shadow: ${isSpeaking ? '0 0 8px 2px rgba(59, 130, 246, 0.8)' : isListening ? '0 0 8px 2px rgba(220, 38, 38, 0.8)' : 'none'};
               }
               50% {

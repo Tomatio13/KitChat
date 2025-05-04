@@ -1139,11 +1139,11 @@ export function AIChat({
                 key={index}
                 className="h-3 w-3 rounded-full transition-all duration-300"
                 style={{
-                  animation: isListening ? `knightRiderLed 3s infinite ease-in-out` : 'none',
-                  animationDelay: isListening ? `${Math.abs(7.5 - index) * 0.1}s` : '0s',
+                  animation: (isListening || isSpeaking) ? `knightRiderLed 3s infinite ease-in-out` : 'none',
+                  animationDelay: (isListening || isSpeaking) ? `${Math.abs(7.5 - index) * 0.1}s` : '0s',
                   backgroundColor: isDarkMode 
-                    ? isListening ? '#0d1117' : '#21262d' 
-                    : isListening ? '#e5e7eb' : '#d1d5db'
+                    ? (isListening || isSpeaking) ? '#0d1117' : '#21262d' 
+                    : (isListening || isSpeaking) ? '#e5e7eb' : '#d1d5db'
                 }}
               ></div>
             ))}
@@ -1157,8 +1157,8 @@ export function AIChat({
               }
               15%, 35% { 
                 transform: scale(1.2);
-                background-color: #ef4444;
-                box-shadow: 0 0 8px 2px rgba(220, 38, 38, 0.8);
+                background-color: ${isSpeaking ? '#3b82f6' : isListening ? '#ef4444' : (isDarkMode ? '#0d1117' : '#e5e7eb')};
+                box-shadow: ${isSpeaking ? '0 0 8px 2px rgba(59, 130, 246, 0.8)' : isListening ? '0 0 8px 2px rgba(220, 38, 38, 0.8)' : 'none'};
               }
               50% {
                 transform: scale(1);
@@ -1167,8 +1167,8 @@ export function AIChat({
               }
               65%, 85% {
                 transform: scale(1.2);
-                background-color: #ef4444;
-                box-shadow: 0 0 8px 2px rgba(220, 38, 38, 0.8);
+                background-color: ${isSpeaking ? '#3b82f6' : isListening ? '#ef4444' : (isDarkMode ? '#0d1117' : '#e5e7eb')};
+                box-shadow: ${isSpeaking ? '0 0 8px 2px rgba(59, 130, 246, 0.8)' : isListening ? '0 0 8px 2px rgba(220, 38, 38, 0.8)' : 'none'};
               }
             }
           `}</style>

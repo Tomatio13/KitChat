@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useCallback, useState, useRef } from 'react'
-import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX, Plus } from 'lucide-react'
+import { Send, Trash2, BrainCircuit, Mic, MicOff, VolumeX, Plus, ArrowUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import TextareaAutosize from 'react-textarea-autosize'
 import { Card, CardContent } from '@/components/ui/card'
@@ -241,14 +241,14 @@ const MessageItem = React.memo(({
     }), [isDarkMode]); // isDarkMode への依存を明記
 
     const MessageContent = React.useMemo(() => (
-      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+      <div className="whitespace-pre-wrap text-xs leading-relaxed">
         {message.role === 'user' ? (
           // ユーザーメッセージはそのまま表示
           <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
         ) : (
           // AIメッセージはMarkdownとして表示
           <ReactMarkdown
-            className="markdown-content leading-none text-xs"
+            className="markdown-content leading-none"
             components={markdownComponents} // 型定義されたコンポーネントを使用
           >
             {message.content}
@@ -593,16 +593,18 @@ export function AIChat({
       };
 
       chunkUtterance.onerror = (event) => {
-        console.error('音声合成エラー:', event.error);
-        // --- 修正: interrupted エラーの場合は警告ログのみとし、アラートは表示しない ---
+        // interrupted エラーはユーザーによる意図的な停止なので、エラーとして扱わない
         if (event.error === 'interrupted') {
-          console.warn('読み上げが中断されました (interrupted)。状態をリセットします。');
+          console.log('読み上げが中断されました (interrupted)。通常の停止処理として扱います。');
+          // エラーとして console.error に出力しない
         } else {
+          console.error('音声合成エラー:', event.error);
           // interrupted 以外のエラーの場合のみアラートを表示
           alert(`音声の読み上げ中にエラーが発生しました: ${event.error}`);
         }
-        // --------------------------------------------------------------------
-        setIsSpeaking(false); // エラー時も false に設定
+        
+        // 状態のリセット処理は共通
+        setIsSpeaking(false);
         if (speakingMonitorRef.current) {
           clearInterval(speakingMonitorRef.current);
           speakingMonitorRef.current = null;
@@ -1102,7 +1104,7 @@ export function AIChat({
           </Button>
         </div>
       </div>
-      <div className="flex-grow h-[calc(100%-7.5rem-28px)] p-4 overflow-y-auto"> {/* LEDスキャナーの高さ分を引く */}
+      <div className="flex-grow h-[calc(100%-7.5rem-28px)] p-4 overflow-y-auto custom-scrollbar"> {/* LEDスキャナーの高さ分を引く */}
         <MessageList
           messages={messages}
           isLoading={isLoading}
@@ -1112,57 +1114,55 @@ export function AIChat({
       </div>
 
       {/* LEDスキャナーライト - 常に表示（音声入力中のみアニメーション） */}
-      <div className="w-full h-7 overflow-hidden">
+      <div className="w-full h-6 overflow-hidden flex items-center justify-center">
         <div 
-          className={`h-7 w-full flex justify-center items-center border-t border-b ${isDarkMode ? 'border-[#30363d] bg-[#0d1117]' : 'border-gray-200 bg-gray-50'}`}
+          className={`h-6 w-full flex justify-center items-center ${isDarkMode ? 'bg-[#0d1117]' : 'bg-gray-50'}`}
           suppressHydrationWarning
         >
-          <div className="flex justify-between w-[90%] max-w-[600px]">
-            {Array.from({ length: 16 }).map((_, index) => (
+          <div className="flex justify-center space-x-1.5 w-[80%] max-w-[500px]">
+            {Array.from({ length: 12 }).map((_, index) => (
               <div 
                 key={index}
-                className="h-3 w-3 rounded-full transition-all duration-300"
+                className={`h-1.5 w-2 rounded-sm transition-all duration-300 transform ${
+                  (isListening || isSpeaking) ? 'scale-y-100' : 'scale-y-50'
+                }`}
                 style={{
-                  animation: (isListening || isSpeaking) ? `knightRiderLed 3s infinite ease-in-out` : 'none',
-                  animationDelay: (isListening || isSpeaking) ? `${Math.abs(7.5 - index) * 0.1}s` : '0s',
+                  animation: (isListening || isSpeaking) ? `modernLed 1.8s infinite ease-in-out` : 'none',
+                  animationDelay: (isListening || isSpeaking) ? `${Math.abs(5.5 - index) * 0.08}s` : '0s',
                   backgroundColor: isDarkMode 
-                    ? (isListening || isSpeaking) ? '#0d1117' : '#21262d' 
-                    : (isListening || isSpeaking) ? '#e5e7eb' : '#d1d5db'
+                    ? (isListening || isSpeaking)
+                      ? isSpeaking 
+                        ? 'rgba(59, 130, 246, 0.7)' // 青 (読み上げ中)
+                        : 'rgba(239, 68, 68, 0.7)'  // 赤 (音声認識中)
+                      : 'rgba(45, 55, 72, 0.5)'     // 通常時のダークモード
+                    : (isListening || isSpeaking)
+                      ? isSpeaking 
+                        ? 'rgba(59, 130, 246, 0.6)' // 青 (読み上げ中)
+                        : 'rgba(239, 68, 68, 0.6)'  // 赤 (音声認識中)
+                      : 'rgba(209, 213, 219, 0.8)'  // 通常時のライトモード
                 }}
               ></div>
             ))}
           </div>
-          <style jsx>{`
-            @keyframes knightRiderLed {
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes modernLed {
               0%, 100% {
-                transform: scale(1);
-                background-color: ${isDarkMode ? '#0d1117' : '#e5e7eb'};
-                box-shadow: none;
-              }
-              15%, 35% {
-                transform: scale(1.2);
-                background-color: ${isSpeaking ? '#3b82f6' /* 青 */ : isListening ? '#ef4444' /* 赤 */ : (isDarkMode ? '#0d1117' : '#e5e7eb')};
-                box-shadow: ${isSpeaking ? '0 0 8px 2px rgba(59, 130, 246, 0.8)' : isListening ? '0 0 8px 2px rgba(220, 38, 38, 0.8)' : 'none'};
+                opacity: 0.6;
+                transform: scaleY(0.7);
               }
               50% {
-                transform: scale(1);
-                background-color: ${isDarkMode ? '#0d1117' : '#e5e7eb'};
-                box-shadow: none;
-              }
-              65%, 85% {
-                transform: scale(1.2);
-                background-color: ${isSpeaking ? '#3b82f6' : isListening ? '#ef4444' : (isDarkMode ? '#0d1117' : '#e5e7eb')};
-                box-shadow: ${isSpeaking ? '0 0 8px 2px rgba(59, 130, 246, 0.8)' : isListening ? '0 0 8px 2px rgba(220, 38, 38, 0.8)' : 'none'};
+                opacity: 1;
+                transform: scaleY(1.2);
               }
             }
-          `}</style>
+          `}} />
         </div>
       </div>
 
       {/* フォーム要素の再構築 */}
       <form 
         onSubmit={handleFormSubmitCallback} 
-        className={`px-4 py-2 border-t ${isDarkMode ? 'border-[#30363d] bg-[#0d1117]' : 'border-gray-200 bg-gray-100'}`}
+        className={`px-4 py-2 ${isDarkMode ? 'bg-[#0d1117]' : 'bg-gray-100'}`}
         suppressHydrationWarning
       >
         <div className="flex items-center gap-2 relative">
@@ -1247,12 +1247,35 @@ export function AIChat({
                 } ${(isLoading || !input.trim() || availableModels.length === 0 || !selectedModel) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 suppressHydrationWarning
               >
-                <Send size={16} />
+                <ArrowUp size={16} />
               </button>
             </div>
           </div>
         </div>
       </form>
+
+      {/* カスタムスクロールバースタイル */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: ${isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'};
+          border-radius: 20px;
+          border: 2px solid transparent;
+          background-clip: content-box;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: ${isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'};
+        }
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: ${isDarkMode ? 'rgba(255, 255, 255, 0.2) transparent' : 'rgba(0, 0, 0, 0.2) transparent'};
+        }
+      `}} />
     </div>
   )
 }

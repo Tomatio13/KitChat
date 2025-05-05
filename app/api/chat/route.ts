@@ -216,6 +216,7 @@ export async function POST(req: Request) {
 
               Today's date is ${new Date().toISOString().split("T")[0]}.`,
       onFinish: async () => {
+        // あconsole.log('LLM Response:', result.text);
         await closeAll();
       },
     });

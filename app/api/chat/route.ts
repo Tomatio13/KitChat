@@ -7,6 +7,8 @@ import { streamText, CoreMessage, LanguageModel } from 'ai';
 import { getMcpTools } from '@/lib/mcp-tools';
 import { memoryTools } from '@/lib/local-tools';
 import { createOllama, OllamaProvider } from 'ollama-ai-provider';
+import fs from 'fs';
+import path from 'path';
 
 // --- モデル設定の型定義 ---
 interface ProviderModels {
@@ -201,7 +203,7 @@ export async function POST(req: Request) {
       tools,
       maxSteps: 10,
       system: `You are a helpful japanese assistant that can answer questions and help with tasks.speak in japanese.
-
+              Today's date and time in Japan is ${getJapanTime()}.
               Format your responses using Markdown, especially utilizing these elements:
               - Headings (#, ##)
               - Bullet points (- or 1.)
@@ -214,7 +216,10 @@ export async function POST(req: Request) {
               - Titles and other string elements within the graphs should be in English.
                 However, the main body of the text should be in Japanese.
 
-              Today's date is ${new Date().toISOString().split("T")[0]}.`,
+              When using Weather MCP, please specify the city name in English and take the current date and time into consideration..
+              
+              ${loadCustomPrompt()}
+              `,
       onFinish: async () => {
         // あconsole.log('LLM Response:', result.text);
         await closeAll();
@@ -241,3 +246,51 @@ export async function POST(req: Request) {
     });
   }
 } 
+
+// 日本の現在時刻を表示する関数
+const getJapanTime = (): string => {
+  const now = new Date();
+  // 日本標準時 (JST: UTC+9) に変換
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  };
+  return new Intl.DateTimeFormat('ja-JP', options).format(now);
+}
+
+// カスタムプロンプトファイルを読み込む関数
+const loadCustomPrompt = (): string => {
+  try {
+    // 環境変数からカスタムプロンプトのファイル名を取得
+    const customPromptFile = process.env.CUSTOM_PROMPT;
+    
+    // カスタムプロンプトが設定されていない場合は空文字列を返す
+    if (!customPromptFile) {
+      return '';
+    }
+    
+    // プロンプトファイルのパスを生成
+    const promptPath = path.join(process.cwd(), 'public', 'prompt', customPromptFile);
+    
+    // ファイルが存在するか確認
+    if (!fs.existsSync(promptPath)) {
+      console.warn(`カスタムプロンプトファイルが見つかりません: ${promptPath}`);
+      return '';
+    }
+    
+    // ファイルを読み込んで内容を返す
+    const promptContent = fs.readFileSync(promptPath, 'utf-8');
+    console.log(`カスタムプロンプトを読み込みました: ${customPromptFile}`);
+    
+    return promptContent;
+  } catch (error) {
+    console.error('カスタムプロンプトの読み込みに失敗しました:', error);
+    return '';
+  }
+}; 
